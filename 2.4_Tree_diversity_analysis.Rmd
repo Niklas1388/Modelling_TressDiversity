@@ -1,0 +1,2979 @@
+---
+title: "Species Distributaion Brasil"
+subtitle: "Cerrado"
+author: "Niklas Langner, 21168677"
+date: "November 29, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Setting workspace
+```{r, echo=FALSE, include=FALSE}
+BR <- read.csv("Forest_Data/species_Rbra.csv")
+BR$ï..plot <- NULL
+
+# load packages
+loadandinstall <- function(mypkg) {if (!is.element(mypkg, installed.packages()[,1]))
+{install.packages(mypkg)}; library(mypkg, character.only = T)}
+
+
+#devtools::install('loicdtx/bfastSpatial', ref = 'develop')
+#devtools::install_github('loicdtx/bfastSpatial', ref='develop')
+loadandinstall("rstudioapi")
+loadandinstall("bfastSpatial")
+loadandinstall("devtools")
+loadandinstall("RStoolbox")
+loadandinstall("raster")
+loadandinstall("Hmisc") ###attention::Mask!!
+loadandinstall("compiler")
+loadandinstall("doParallel")
+loadandinstall("bfast")
+loadandinstall("RQGIS")
+loadandinstall("dplyr")
+loadandinstall("GGally")
+loadandinstall("vegan")
+loadandinstall("vegetarian")
+loadandinstall("Hmisc")
+loadandinstall("corrplot")
+loadandinstall("devtools")
+loadandinstall("bfastSpatial")
+loadandinstall("RStoolbox")
+loadandinstall("raster")
+loadandinstall("car")
+loadandinstall("entropy")
+rasterOptions(progress = "text")
+
+
+# Rocchinis function spectralRao is not integrated to the R-environment
+# load function RAO in a second script
+
+```
+
+## Removing NA
+```{r, echo=FALSE, include=FALSE}
+# cerrado denso
+str(BR)
+is.na(BR)
+BR[is.na(BR)] <- 0
+
+```
+
+# Analyse of abundance
+## The commonness, and rarity of species
+### plotting rel.abundaces ECDF
+```{r}
+# abundances/plot
+abundanzen.gesamt.BR <- apply(BR, 2, sum)
+abundanzen.gesamt.BR <- apply(BR, 2, sum)
+
+
+abun <- function(x) {apply(x,2,sum)}
+rela <- function(x) {x/sum(x)}
+for(i in 1:nrow(BR)){
+  
+ assign((paste0("abundanzen.plot",i,".BR",sep="")), abun(BR[i,]))
+    a=get(paste("abundanzen.plot",i,".BR",sep=""))
+ assign((paste0("rel.abundanzen.plot",i,".BR", sep="")), rela(a))
+    b=get(paste("rel.abundanzen.plot",i,".BR", sep=""))
+if(i==1){Ecdf(b[b > 0], log = 'x', xlab = "relative abundance (log scale)", ylab = "relative species")} else {Ecdf(b[b > 0], log = 'x', lty = i, col = i, add = TRUE)}
+ 
+}
+#legend("bottomright", inset=0.02, legend=c(""), lty=c(), col = c())
+
+```
+
+
+# Biodiversity
+## hill-diversity or hill-numbers
+```{r, echo=FALSE, include=TRUE, results="hide"}
+
+#----------vegetarian---------------
+
+library(vegetarian)
+
+#species richness (q=0)
+#species <- seq(1,8,1)
+
+abun <- function(x) {apply(x,2,sum)}
+hill <- function(x,i) {d(x, lev = "alpha", wts = FALSE, q = c(i), boot = FALSE, boot.arg = list(s.sizes = NULL, num.iter = 100))}
+#rm(hillNr)
+for(i in 1:nrow(BR)){
+  
+ assign((paste0("abundanzen.plot",i,".BR",sep="")), abun(BR[i,]))
+    a=get(paste("abundanzen.plot",i,".BR",sep=""))
+    b <- hill(a,0)
+    c <- hill(a,1)
+    d <- hill(a,2)
+   
+   # species <- seq(1:nrow(BR))
+     
+if(!exists("hillNr")){hillNr<-b}else{ hillNr<-rbind(hillNr,b)}
+hillNr <- as.data.frame(hillNr)
+hillNr$shannon[i] <- c
+hillNr$simpson[i] <- d
+#if(!exists("hillNr")){hillNr<-d}else{ hillNr<-cbind(hillNr,d)}
+}
+```
+
+# vegetation indices
+```{r}
+
+# load fragments to crop VIs
+fragment <- shapefile("GIS_Data/Fragment_shp/fragments.shp")
+# match coordinates shapefile-raster
+r <- raster(raster("GIS_Data/VIs/ndvi/LC082270692017070201T1_ndvi.grd"))
+fragment <- spTransform(fragment, CRS = crs(r))
+identicalCRS(fragment, r)
+
+# load VIs
+savi <-raster("GIS_Data/VIs/savi/LC082270692017070201T1_savi.grd")
+savi <- crop(savi, fragment, snap="out")*10000 # savi was manuallay calculated; factor 10000 to equalize VI-scales; crop savi to the extent of study fragment 
+ndvi <- raster("GIS_Data/VIs/ndvi/LC082270692017070201T1_ndvi.grd")
+evi <- raster("GIS_Data/VIs/evi/LC082270692017070201T1_evi.grd")
+mndwi <- raster("GIS_Data/VIs/mndwi/LC082270692017070201T1_mndwi.grd")
+nbr <- raster("GIS_Data/VIs/nbr/LC082270692017070201T1_nbr.grd")
+ndmi <- raster("GIS_Data/VIs/ndmi/LC082270692017070201T1_ndmi.grd")
+ndwi <- raster("GIS_Data/VIs/ndwi/LC082270692017070201T1_ndwi.grd")
+tcb <- raster("GIS_Data/VIs/tcb/LC082270692017070201T1_tcb.grd")
+tcg <- raster("GIS_Data/VIs/tcg/LC082270692017070201T1_tcg.grd")
+tcw <- raster("GIS_Data/VIs/tcw/LC082270692017070201T1_tcw.grd")
+
+# load buffer mask 600m
+mask_buf_Fragment_A <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_A.tif")
+mask_buf_Fragment_B <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_B.tif")
+mask_buf_Fragment_C <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_C.tif")
+mask_buf_Fragment_D <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_D.tif")
+mask_buf_Fragment_E <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_E.tif")
+mask_buf_Fragment_F <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_F.tif")
+mask_buf_Fragment_G <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_G.tif")
+mask_buf_Fragment_H <- raster("GIS_Data/Buffer_Raster/Donut_Buffer/Fragment_H.tif")
+
+# list indicies & Buffer Zone output for Loop
+indices <- c('ndvi', 'evi', "savi", 'ndmi', 'ndwi', 'mndwi', 'tcb', 'tcg', 'tcw', 'nbr')
+frag <- c("zo_01_C_Fragment_A", "zo_04_C_Fragment_A", "zo_07_C_Fragment_A", "zo_10_C_Fragment_A", 
+          "zo_01_C_Fragment_B", "zo_04_C_Fragment_B", "zo_07_C_Fragment_B", "zo_10_C_Fragment_B",
+          "zo_01_C_Fragment_C", "zo_04_C_Fragment_C", "zo_07_C_Fragment_C", "zo_10_C_Fragment_C",
+          "zo_01_C_Fragment_D", "zo_04_C_Fragment_D", "zo_07_C_Fragment_D", "zo_10_C_Fragment_D",
+          "zo_01_C_Fragment_E", "zo_04_C_Fragment_E", "zo_07_C_Fragment_E", "zo_10_C_Fragment_E",
+          "zo_01_C_Fragment_F", "zo_04_C_Fragment_F", "zo_07_C_Fragment_F", "zo_10_C_Fragment_F",
+          "zo_01_C_Fragment_G", "zo_04_C_Fragment_G", "zo_07_C_Fragment_G", "zo_10_C_Fragment_G",
+          "zo_01_C_Fragment_H", "zo_04_C_Fragment_H", "zo_07_C_Fragment_H", "zo_10_C_Fragment_H")
+
+#for (i in 1:length(indices)){list = indices[i]
+for (i in 1:length(indices)){list = indices[i]
+# crop buffer and veg.ratser (containing veg.Index) to same extend (mandatory for function mask!)
+CropEx <- function(i,g){crop(extend(i, g), g)}
+CropEx <- cmpfun(CropEx)
+
+
+# Fragment_A
+assign(paste0(list, "_eq_Fragment_A",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_A))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_A",sep="")), mask_buf_Fragment_A)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_A",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_A")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_A",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_A")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_A",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_A")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_A",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_A")), maskvalue = 100, inverse = TRUE))
+
+# Fragment_B
+assign(paste0(list, "_eq_Fragment_B",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_B))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_B",sep="")), mask_buf_Fragment_B)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_B",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_B")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_B",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_B")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_B",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_B")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_B",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_B")), maskvalue = 100, inverse = TRUE))
+
+# Fragment_C
+assign(paste0(list, "_eq_Fragment_C",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_C))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_C",sep="")), mask_buf_Fragment_C)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_C",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_C")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_C",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_C")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_C",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_C")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_C",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_C")), maskvalue = 100, inverse = TRUE))
+
+# Fragment_D
+assign(paste0(list, "_eq_Fragment_D",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_D))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_D",sep="")), mask_buf_Fragment_D)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_D",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_D")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_D",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_D")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_D",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_D")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_D",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_D")), maskvalue = 100, inverse = TRUE))
+
+# Fragment_E
+assign(paste0(list, "_eq_Fragment_E",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_E))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_E",sep="")), mask_buf_Fragment_E)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_E",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_E")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_E",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_E")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_E",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_E")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_E",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_E")), maskvalue = 100, inverse = TRUE))
+
+# Fragment_F
+assign(paste0(list, "_eq_Fragment_F",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_F))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_F",sep="")), mask_buf_Fragment_F)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_F",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_F")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_F",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_F")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_F",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_F")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_F",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_F")), maskvalue = 100, inverse = TRUE))
+
+# Fragment_G
+assign(paste0(list, "_eq_Fragment_G",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_G))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_G",sep="")), mask_buf_Fragment_G)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_G",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_G")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_G",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_G")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_G",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_G")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_G",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_G")), maskvalue = 100, inverse = TRUE))
+
+# Fragment_H
+assign(paste0(list, "_eq_Fragment_H",sep=""), CropEx(get(paste(list)), mask_buf_Fragment_H))
+mask_c <- raster::mask(get(paste0(list, "_eq_Fragment_H",sep="")), mask_buf_Fragment_H)
+# subset(mask) veg.raster by different buffer-zones
+assign(paste0("zo_01_C_Fragment_H",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_H")), maskvalue = 10, inverse = TRUE))
+assign(paste0("zo_04_C_Fragment_H",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_H")), maskvalue = 40, inverse = TRUE))
+assign(paste0("zo_07_C_Fragment_H",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_H")), maskvalue = 70, inverse = TRUE))
+assign(paste0("zo_10_C_Fragment_H",sep=""), raster::mask(get(paste("mask_c")), get(paste("mask_buf_Fragment_H")), maskvalue = 100, inverse = TRUE))
+
+
+# getValues
+assign(paste0("sd",list, sep=""), c(sd(getValues(zo_01_C_Fragment_A), na.rm=TRUE), 
+                                      sd(getValues(zo_04_C_Fragment_A), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_A), na.rm=TRUE), 
+                                      sd(getValues(zo_10_C_Fragment_A), na.rm=TRUE),
+                                      sd(getValues(zo_01_C_Fragment_B), na.rm=TRUE),
+                                      sd(getValues(zo_04_C_Fragment_B), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_B), na.rm=TRUE), 
+                                      sd(getValues(zo_10_C_Fragment_B), na.rm=TRUE),
+                                      sd(getValues(zo_01_C_Fragment_C), na.rm=TRUE),
+                                      sd(getValues(zo_04_C_Fragment_C), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_C), na.rm=TRUE), 
+                                      sd(getValues(zo_10_C_Fragment_C), na.rm=TRUE),
+                                      sd(getValues(zo_01_C_Fragment_D), na.rm=TRUE),
+                                      sd(getValues(zo_04_C_Fragment_D), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_D), na.rm=TRUE),
+                                      sd(getValues(zo_10_C_Fragment_D), na.rm=TRUE),
+                                      sd(getValues(zo_01_C_Fragment_E), na.rm=TRUE), 
+                                      sd(getValues(zo_04_C_Fragment_E), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_E), na.rm=TRUE), 
+                                      sd(getValues(zo_10_C_Fragment_E), na.rm=TRUE),
+                                      sd(getValues(zo_01_C_Fragment_F), na.rm=TRUE),
+                                      sd(getValues(zo_04_C_Fragment_F), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_F), na.rm=TRUE), 
+                                      sd(getValues(zo_10_C_Fragment_F), na.rm=TRUE),
+                                      sd(getValues(zo_01_C_Fragment_G), na.rm=TRUE),
+                                      sd(getValues(zo_04_C_Fragment_G), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_G), na.rm=TRUE), 
+                                      sd(getValues(zo_10_C_Fragment_G), na.rm=TRUE),
+                                      sd(getValues(zo_01_C_Fragment_H), na.rm=TRUE),
+                                      sd(getValues(zo_04_C_Fragment_H), na.rm=TRUE),
+                                      sd(getValues(zo_07_C_Fragment_H), na.rm=TRUE), 
+                                      sd(getValues(zo_10_C_Fragment_H), na.rm=TRUE)))
+
+assign(paste0("mean",list, sep=""), c(mean(getValues(zo_01_C_Fragment_A), na.rm=TRUE), 
+                                      mean(getValues(zo_04_C_Fragment_A), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_A), na.rm=TRUE), 
+                                      mean(getValues(zo_10_C_Fragment_A), na.rm=TRUE),
+                                      mean(getValues(zo_01_C_Fragment_B), na.rm=TRUE),
+                                      mean(getValues(zo_04_C_Fragment_B), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_B), na.rm=TRUE), 
+                                      mean(getValues(zo_10_C_Fragment_B), na.rm=TRUE),
+                                      mean(getValues(zo_01_C_Fragment_C), na.rm=TRUE),
+                                      mean(getValues(zo_04_C_Fragment_C), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_C), na.rm=TRUE), 
+                                      mean(getValues(zo_10_C_Fragment_C), na.rm=TRUE),
+                                      mean(getValues(zo_01_C_Fragment_D), na.rm=TRUE),
+                                      mean(getValues(zo_04_C_Fragment_D), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_D), na.rm=TRUE),
+                                      mean(getValues(zo_10_C_Fragment_D), na.rm=TRUE),
+                                      mean(getValues(zo_01_C_Fragment_E), na.rm=TRUE), 
+                                      mean(getValues(zo_04_C_Fragment_E), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_E), na.rm=TRUE), 
+                                      mean(getValues(zo_10_C_Fragment_E), na.rm=TRUE),
+                                      mean(getValues(zo_01_C_Fragment_F), na.rm=TRUE),
+                                      mean(getValues(zo_04_C_Fragment_F), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_F), na.rm=TRUE), 
+                                      mean(getValues(zo_10_C_Fragment_F), na.rm=TRUE),
+                                      mean(getValues(zo_01_C_Fragment_G), na.rm=TRUE),
+                                      mean(getValues(zo_04_C_Fragment_G), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_G), na.rm=TRUE), 
+                                      mean(getValues(zo_10_C_Fragment_G), na.rm=TRUE),
+                                      mean(getValues(zo_01_C_Fragment_H), na.rm=TRUE),
+                                      mean(getValues(zo_04_C_Fragment_H), na.rm=TRUE),
+                                      mean(getValues(zo_07_C_Fragment_H), na.rm=TRUE), 
+                                      mean(getValues(zo_10_C_Fragment_H), na.rm=TRUE)))
+
+assign(paste0("min",list, sep=""), c(min(getValues(zo_01_C_Fragment_A), na.rm=TRUE), 
+                                      min(getValues(zo_04_C_Fragment_A), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_A), na.rm=TRUE), 
+                                      min(getValues(zo_10_C_Fragment_A), na.rm=TRUE),
+                                      min(getValues(zo_01_C_Fragment_B), na.rm=TRUE),
+                                      min(getValues(zo_04_C_Fragment_B), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_B), na.rm=TRUE), 
+                                      min(getValues(zo_10_C_Fragment_B), na.rm=TRUE),
+                                      min(getValues(zo_01_C_Fragment_C), na.rm=TRUE),
+                                      min(getValues(zo_04_C_Fragment_C), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_C), na.rm=TRUE), 
+                                      min(getValues(zo_10_C_Fragment_C), na.rm=TRUE),
+                                      min(getValues(zo_01_C_Fragment_D), na.rm=TRUE),
+                                      min(getValues(zo_04_C_Fragment_D), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_D), na.rm=TRUE),
+                                      min(getValues(zo_10_C_Fragment_D), na.rm=TRUE),
+                                      min(getValues(zo_01_C_Fragment_E), na.rm=TRUE), 
+                                      min(getValues(zo_04_C_Fragment_E), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_E), na.rm=TRUE), 
+                                      min(getValues(zo_10_C_Fragment_E), na.rm=TRUE),
+                                      min(getValues(zo_01_C_Fragment_F), na.rm=TRUE),
+                                      min(getValues(zo_04_C_Fragment_F), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_F), na.rm=TRUE), 
+                                      min(getValues(zo_10_C_Fragment_F), na.rm=TRUE),
+                                      min(getValues(zo_01_C_Fragment_G), na.rm=TRUE),
+                                      min(getValues(zo_04_C_Fragment_G), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_G), na.rm=TRUE), 
+                                      min(getValues(zo_10_C_Fragment_G), na.rm=TRUE),
+                                      min(getValues(zo_01_C_Fragment_H), na.rm=TRUE),
+                                      min(getValues(zo_04_C_Fragment_H), na.rm=TRUE),
+                                      min(getValues(zo_07_C_Fragment_H), na.rm=TRUE), 
+                                      min(getValues(zo_10_C_Fragment_H), na.rm=TRUE)))
+
+assign(paste0("entropy",list, sep=""), c(entropy(na.omit(getValues(zo_01_C_Fragment_A)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_A)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_A)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_A)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_01_C_Fragment_B)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_B)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_B)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_B)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_01_C_Fragment_C)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_C)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_C)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_C)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_01_C_Fragment_D)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_D)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_D)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_D)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_01_C_Fragment_E)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_E)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_E)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_E)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_01_C_Fragment_F)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_F)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_F)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_F)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_01_C_Fragment_G)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_G)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_G)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_G)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_01_C_Fragment_H)), method = "ML", na.rm=TRUE), 
+                                       entropy(na.omit(getValues(zo_04_C_Fragment_H)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_07_C_Fragment_H)), method = "ML", na.rm=TRUE),
+                                       entropy(na.omit(getValues(zo_10_C_Fragment_H)), method = "ML", na.rm=TRUE)))
+                                       
+
+
+
+
+assign(paste0("max",list, sep=""), c(max(getValues(zo_01_C_Fragment_A), na.rm=TRUE), 
+                                      max(getValues(zo_04_C_Fragment_A), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_A), na.rm=TRUE), 
+                                      max(getValues(zo_10_C_Fragment_A), na.rm=TRUE),
+                                      max(getValues(zo_01_C_Fragment_B), na.rm=TRUE),
+                                      max(getValues(zo_04_C_Fragment_B), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_B), na.rm=TRUE), 
+                                      max(getValues(zo_10_C_Fragment_B), na.rm=TRUE),
+                                      max(getValues(zo_01_C_Fragment_C), na.rm=TRUE),
+                                      max(getValues(zo_04_C_Fragment_C), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_C), na.rm=TRUE), 
+                                      max(getValues(zo_10_C_Fragment_C), na.rm=TRUE),
+                                      max(getValues(zo_01_C_Fragment_D), na.rm=TRUE),
+                                      max(getValues(zo_04_C_Fragment_D), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_D), na.rm=TRUE),
+                                      max(getValues(zo_10_C_Fragment_D), na.rm=TRUE),
+                                      max(getValues(zo_01_C_Fragment_E), na.rm=TRUE), 
+                                      max(getValues(zo_04_C_Fragment_E), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_E), na.rm=TRUE), 
+                                      max(getValues(zo_10_C_Fragment_E), na.rm=TRUE),
+                                      max(getValues(zo_01_C_Fragment_F), na.rm=TRUE),
+                                      max(getValues(zo_04_C_Fragment_F), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_F), na.rm=TRUE), 
+                                      max(getValues(zo_10_C_Fragment_F), na.rm=TRUE),
+                                      max(getValues(zo_01_C_Fragment_G), na.rm=TRUE),
+                                      max(getValues(zo_04_C_Fragment_G), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_G), na.rm=TRUE), 
+                                      max(getValues(zo_10_C_Fragment_G), na.rm=TRUE),
+                                      max(getValues(zo_01_C_Fragment_H), na.rm=TRUE),
+                                      max(getValues(zo_04_C_Fragment_H), na.rm=TRUE),
+                                      max(getValues(zo_07_C_Fragment_H), na.rm=TRUE), 
+                                      max(getValues(zo_10_C_Fragment_H), na.rm=TRUE)))
+
+#if (i==1){
+#  for (j in 25:length(frag)){list2 = frag[j]
+#  assign(paste0("rao_",list2, sep=""), spectralrao(get(paste(list2))/10000, distance_m="euclidean", p=NULL, window=9, mode="classic", lambda=0, shannon=TRUE, rescale=FALSE, na.tolerance=1.0, simplify=3, nc.cores=1, cluster.type="MPI", debugging=FALSE))
+#  gg <- as.data.frame(lapply(get(paste0("rao_",list2, sep="")), mean, na.rm=TRUE))
+#  assign(paste0("values_rao",list2, sep=""), gg[1,1])
+#  assign(paste0("values_shannon",list2, sep=""), gg[1,2  }}
+}
+
+
+basal <- as.data.frame(cbind(meanevi, meanmndwi, meannbr, meanndmi, meanndvi, meanndwi, meansavi, meantcb, meantcg, meantcw, sdevi, sdmndwi, sdnbr, sdndmi, sdndvi, sdndwi, sdsavi, sdtcb, sdtcg,sdtcw, minevi, minmndwi, minnbr, minndmi, minndvi, minndwi, minsavi, mintcb, mintcg, mintcw, maxevi, maxmndwi, maxnbr, maxndmi, maxndvi, maxndwi, maxsavi, maxtcb, maxtcg, maxtcw, entropyevi, entropymndwi, entropynbr, entropyndmi, entropyndvi, entropyndwi, entropysavi, entropytcb, entropytcg, entropytcw))
+
+basal$rao <- c(values_raozo_01_C_Fragment_A, values_raozo_04_C_Fragment_A, values_raozo_07_C_Fragment_A, values_raozo_10_C_Fragment_A, values_raozo_01_C_Fragment_B, values_raozo_04_C_Fragment_B, values_raozo_07_C_Fragment_B, values_raozo_10_C_Fragment_B, values_raozo_01_C_Fragment_C, values_raozo_04_C_Fragment_C, values_raozo_07_C_Fragment_C, values_raozo_10_C_Fragment_C, values_raozo_01_C_Fragment_D, values_raozo_04_C_Fragment_D, values_raozo_07_C_Fragment_D, values_raozo_10_C_Fragment_D, values_raozo_01_C_Fragment_E, values_raozo_04_C_Fragment_E, values_raozo_07_C_Fragment_E, values_raozo_10_C_Fragment_E, values_raozo_01_C_Fragment_F, values_raozo_04_C_Fragment_F, values_raozo_07_C_Fragment_F, values_raozo_10_C_Fragment_F, values_raozo_01_C_Fragment_G, values_raozo_04_C_Fragment_G, values_raozo_07_C_Fragment_G, values_raozo_10_C_Fragment_G, values_raozo_01_C_Fragment_H, values_raozo_04_C_Fragment_H, values_raozo_07_C_Fragment_H, values_raozo_10_C_Fragment_H)
+
+basal$shannon <- c(values_shannonzo_01_C_Fragment_A, values_shannonzo_04_C_Fragment_A, values_shannonzo_07_C_Fragment_A, values_shannonzo_10_C_Fragment_A, values_shannonzo_01_C_Fragment_B, values_shannonzo_04_C_Fragment_B, values_shannonzo_07_C_Fragment_B, values_shannonzo_10_C_Fragment_B, values_shannonzo_01_C_Fragment_C, values_shannonzo_04_C_Fragment_C, values_shannonzo_07_C_Fragment_C, values_shannonzo_10_C_Fragment_C, values_shannonzo_01_C_Fragment_D, values_shannonzo_04_C_Fragment_D, values_shannonzo_07_C_Fragment_D, values_shannonzo_10_C_Fragment_D, values_shannonzo_01_C_Fragment_E, values_shannonzo_04_C_Fragment_E, values_shannonzo_07_C_Fragment_E, values_shannonzo_10_C_Fragment_E, values_shannonzo_01_C_Fragment_F, values_shannonzo_04_C_Fragment_F, values_shannonzo_07_C_Fragment_F, values_shannonzo_10_C_Fragment_F, values_shannonzo_01_C_Fragment_G, values_shannonzo_04_C_Fragment_G, values_shannonzo_07_C_Fragment_G, values_shannonzo_10_C_Fragment_G, values_shannonzo_01_C_Fragment_H, values_shannonzo_04_C_Fragment_H, values_shannonzo_07_C_Fragment_H, values_shannonzo_10_C_Fragment_H)
+
+
+# plotting indices
+par(mfrow=c(2,2))
+plot(ndvi,  main = "ndvi")
+plot(evi, main = "evi")
+plot(savi, main = "savi")
+plot(mndwi, main = "mndwi" )
+plot(nbr, main = "nbr")
+plot(ndmi, main = "ndmi")
+plot(ndwi, main = "ndwi")
+plot(tcb, main = "tcb")
+plot(tcg, main = "tcg")
+plot(tcw, main = "tcw")
+
+
+```
+
+
+
+# general tree attributes
+## generate dataset: parameter per plot
+```{r}
+BR_data <- read.csv("Forest_Data/Brazi_tree_parameter.csv")
+BR_data$plot <- as.numeric(BR_data$plot)
+# subset subset like:
+#BR_data <- BR_data[BR_data$plot %in% seq(1,32,1),] 
+BR_data$plot <- as.factor(BR_data$plot)
+#as.vector(tapply(BR_data$DBH1.3m..cm.,BR_data$plot, mean, na.rm = TRUE))
+
+#########
+# basal #
+#########
+# introducing new database called basal
+
+basal$plot <- seq(1,32,1) 
+basal$dbh <- as.vector(tapply(BR_data$DBH1.3m..cm.,BR_data$plot, mean, na.rm = TRUE))
+basal$height <- as.vector(tapply(BR_data$Total.tree.height..m.,BR_data$plot, sd, na.rm = TRUE))
+basal$basalarea <- as.vector(tapply(BR_data$Basalarea, BR_data$plot, sum, na.rm = TRUE))
+basal$specrich <- as.numeric(specnumber(BR)) # species richness 
+basal$Shannon_hill_q1 <- hillNr$shannon # shannon index based on hill numbers
+basal$Simpson_hill_q2 <- hillNr$simpson # simpsons indexbased on hill numbers
+#Rarefaction
+loadandinstall("vegan")
+# min individual number
+(n.BR <- min(rowSums(BR)))
+# Rarefaction /plot
+rarefac <- rarefy(BR, n.BR)
+basal$rarefaction <- as.vector(rarefac)
+basal$dist <- c(20, 100, 180, 260, 20, 100, 180, 260, 20, 100, 180, 260, 20, 100, 180, 260, 30, 120, 200, 300, 30, 110, 190, 270, 20, 100, 180, 260, 30, 110, 190, 270) # smallest distance to forest edge
+basal$StemDensity <- apply(BR, 1, sum)
+
+
+
+```
+
+# Biomass
+```{r, results="hide", warning=FALSE}
+library(BIOMASS)
+wd <- BR_data 
+taxo <- correctTaxo(genus = wd$Species, species = wd$Species)
+
+wd$genusCorr <- taxo$genusCorrected
+wd$speciesCorr <- taxo$speciesCorrected
+
+WD <- getWoodDensity(genus = wd$genusCorr,
+                     species = wd$speciesCorr,
+                     stand = wd$?..plot,
+                     region = "SouthAmericaTrop")
+
+wd$WD <- WD$meanWD
+#integrate to dataset basal
+basal$WD <- tapply(wd$WD, wd$plot, sum)
+
+
+#WD[WD$meanWD == min(WD$meanWD),]
+#WD[WD$meanWD == max(WD$meanWD),]
+WD_sort <- WD[order(WD$meanWD),]
+wd$plot <- as.integer((wd$plot))
+basal$WD <- tapply(wd$WD, wd$plot, sum)
+
+# Retrieving APG III Families and Orders from Genus names
+APG <- getTaxonomy(wd$genusCorr, findOrder = T)
+wd$familyAPG <- APG$family
+wd$orderAPG <- APG$order
+
+# 2-RETRIEVE WOOD DENSITY
+dataWD <- getWoodDensity(genus = wd$genusCorr,
+                         species = wd$speciesCorr,
+                         stand = wd$plot,
+                         region = "SouthAmericaTrop")
+
+HDmodel <- modelHD(D = wd$DBH1.3m..cm., H = wd$Total.tree.height..m., 
+                   drawGraph = TRUE, useWeight = TRUE, method = "weibull")
+# AGB CALCULATION
+wd$WD = dataWD$meanWD
+
+AGBPlotList <- by(wd, wd$plot,
+                  function(x) computeAGB(D = x$DBH1.3m..cm., WD = x$WD, H = x$Total.tree.height..m.),
+                  simplify = T)
+AGBplot <- sapply(AGBPlotList, sum, na.rm=TRUE) 
+
+#integrate to dataset basal!
+basal$AGBplot <- sapply(AGBPlotList, sum, na.rm=TRUE) 
+
+```
+
+# write database
+```{r}
+## write table
+write.table(basal, "basal.csv")
+```
+
+#divide Biome
+```{r, results="hide"}
+# divide Cerrado & Cerrado denso dataset basal
+basal$Biome <- "Cerrado"
+sub1 <- basal[basal$plot %in% seq(17,24,1),]
+sub1$Biome <- "Denso"
+sub2 <- basal[!basal$plot %in% seq(17,24,1),]
+basal <- rbind(sub2, sub1)
+
+# divide Cerrado & Cerrado denso dataset BR_data
+BR_data$Biome <- "Cerrado"
+sub3 <- BR_data[BR_data$plot %in% seq(17,24,1),]
+sub3$Biome <- "Denso"
+sub4 <- BR_data[!BR_data$plot %in% seq(17,24,1),]
+BR_data <- rbind(sub3, sub4)
+```
+
+# no mixel
+```{r, error=TRUE}
+#basal <- basal[basal$dist > 30,]
+basal_nomixel <- basal[basal$dist > 30,]
+```
+
+# subset Biomes
+```{r}
+basal_Cerrado <- basal_nomixel[basal_nomixel$Biome == "Cerrado",]
+basal_Denso <- basal_nomixel[basal_nomixel$Biome == "Denso",]
+```
+
+#simple linear Regression
+```{r}
+###############
+# richness    #
+###############
+
+
+# create model
+specR_C <- lm(basal$specrich[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+specR_D <- lm(basal$specrich[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+specR_C_NM <- lm(basal_nomixel$specrich[basal_nomixel$Biome=="Cerrado"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Cerrado"]) #NM = nomixel
+specR_D_NM <- lm(basal_nomixel$specrich[basal_nomixel$Biome=="Denso"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Denso"])
+
+# plot 
+plot(basal$dist, basal$specrich, xlab ="edge distance [m]", ylab = "species richness", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso", "Cerrado no mixel", "Cerrado Denso no mixel"), lty=c(1,3), col = c("black", "red", "blue", "yellow"), cex = 0.5)
+abline(specR_C)
+abline(specR_D, lty = 3, col = "red")
+abline(specR_C_NM, lty = 4, col = "blue")
+abline(specR_D_NM, lty = 5, col = "yellow")
+
+# test models
+shapiro.test((specR_C$residuals))
+shapiro.test((specR_D$residuals))
+shapiro.test((specR_C_NM$residuals))
+shapiro.test((specR_D_NM$residuals))
+
+summary(specR_C)
+summary(specR_D)
+summary(specR_C_NM)
+summary(specR_D_NM)
+
+
+###############
+# rarefaction #
+###############
+
+# create model
+rare_C <- lm(basal$rarefaction[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+rare_D <- lm(basal$rarefaction[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+rare_C_NM <- lm(basal_nomixel$rarefaction[basal_nomixel$Biome=="Cerrado"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Cerrado"]) #NM = no mixel
+rare_D_NM <- lm(basal_nomixel$rarefaction[basal_nomixel$Biome=="Denso"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Denso"])
+
+# plot
+plot(basal$dist, basal$rarefaction, xlab ="edge distance [m]", ylab = "rarefaction", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso", "Cerrado no mixel", "Cerrado Denso no mixel"), lty=c(1,3), col = c("black", "red", "blue", "yellow"), cex = 0.5)
+abline(rare_C)
+abline(rare_D, lty = 3, col = "red")
+abline(rare_C_NM, lty = 4, col = "blue")
+abline(rare_D_NM, lty = 5, col = "yellow")
+
+# test models
+shapiro.test((rare_C$residuals))
+shapiro.test((rare_D$residuals))
+shapiro.test((rare_C_NM$residuals))
+shapiro.test((rare_D_NM$residuals))
+
+summary(rare_C)
+summary(rare_D)
+summary(rare_C_NM)
+summary(rare_D_NM)
+
+
+###########
+# shannon #
+###########
+
+# create model
+shannon_C <- lm(basal$Shannon_hill_q1[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+shannon_D <- lm(basal$Shannon_hill_q1[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+shannon_C_NM <- lm(basal_nomixel$Shannon_hill_q1[basal_nomixel$Biome=="Cerrado"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Cerrado"])
+shannon_D_NM <- lm(basal_nomixel$Shannon_hill_q1[basal_nomixel$Biome=="Denso"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Denso"])
+
+#plot
+plot(basal$dist, basal$Shannon_hill_q1, xlab ="edge distance [m]", ylab = "shannon", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso", "Cerrado no mixel", "Cerrado Denso no mixel"), lty=c(1,3), col = c("black", "red", "blue", "yellow"), cex = 0.5)
+abline(shannon_C)
+abline(shannon_D, lty = 3, col = "red")
+abline(shannon_C_NM, lty = 4, col = "blue")
+abline(shannon_D_NM, lty = 5, col = "yellow")
+
+# test models
+shapiro.test((shannon_C$residuals))
+shapiro.test((shannon_D$residuals))
+shapiro.test((shannon_C_NM$residuals))
+shapiro.test((shannon_D_NM$residuals))
+
+summary(shannon_C)
+summary(shannon_D)
+summary(shannon_C_NM)
+summary(shannon_D_NM)
+
+
+###########
+# simpson #
+###########
+
+# create model
+simo_C <- lm(basal$Simpson_hill_q2[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+simo_D <- lm(basal$Simpson_hill_q2[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+simo_C_NM <- lm(basal_nomixel$Simpson_hill_q2[basal_nomixel$Biome=="Cerrado"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Cerrado"])
+simo_D_NM <- lm(basal_nomixel$Simpson_hill_q2[basal_nomixel$Biome=="Denso"] ~ basal_nomixel$dist[basal_nomixel$Biome=="Denso"])
+
+# plot
+plot(basal$dist, basal$Simpson_hill_q2, xlab ="edge distance [m]", ylab = "simpson", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso", "Cerrado no mixel", "Cerrado Denso no mixel"), lty=c(1,3), col = c("black", "red", "blue", "yellow"), cex = 0.5)
+abline(simo_C)
+abline(simo_D, lty = 3, col = "red")
+abline(simo_C_NM, lty = 4, col = "blue")
+abline(simo_D_NM, lty = 5, col = "yellow")
+
+
+# test models
+shapiro.test((simo_C$residuals))
+shapiro.test((simo_D$residuals))
+shapiro.test((simo_C_NM$residuals))
+shapiro.test((simo_D_NM$residuals))
+
+summary(simo_C)
+summary(simo_D)
+summary(simo_C_NM)
+summary(simo_D_NM)
+
+
+# plotting
+
+par(oma = c(4, 1, 1, 1))
+par(mfrow=c(2,2))
+plot(basal$dist, basal$specrich, xlab ="edge distance [m]", ylab = "species richness", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+abline(specR_C)
+abline(specR_D, lty = 3, col = "red")
+abline(specR_C_NM, lty = 4, col = "blue")
+abline(specR_D_NM, lty = 5, col = "yellow")
+
+plot(basal$dist, basal$rarefaction, xlab ="edge distance [m]", ylab = "rarefaction", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+abline(rare_C)
+abline(rare_D, lty = 3, col = "red")
+abline(rare_C_NM, lty = 4, col = "blue")
+abline(rare_D_NM, lty = 5, col = "yellow")
+
+plot(basal$dist, basal$Shannon_hill_q1, xlab ="edge distance [m]", ylab = "shannon", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+abline(shannon_C)
+abline(shannon_D, lty = 3, col = "red")
+abline(shannon_C_NM, lty = 4, col = "blue")
+abline(shannon_D_NM, lty = 5, col = "yellow")
+
+plot(basal$dist, basal$Simpson_hill_q2, xlab ="edge distance [m]", ylab = "simpson", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+abline(simo_C)
+abline(simo_D, lty = 3, col = "red")
+abline(simo_C_NM, lty = 4, col = "blue")
+abline(simo_D_NM, lty = 5, col = "yellow")
+
+par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
+plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
+#legend("bottom", c("Cerrado", "Cerrado Denso", "Cerrado no mixel", "Cerrado Denso no mixel"), xpd = TRUE, horiz = TRUE, inset = c(0,0),  col = c("black", "red", "blue", "yellow"), lty = c(1, 3,4,5), lwd=1, cex = .5)
+
+legend("bottom",inset = 0,
+       legend = c("Cerrado", "Cerrado Denso", "Cerrado no mixel", "Cerrado Denso no mixel"), 
+       col = c("black", "red", "blue", "yellow"), lwd=1, cex=.5, horiz = TRUE)
+
+
+```
+
+
+
+
+#correlation analysis of spectral variables
+```{r}
+####################
+# Cerrado          #  
+####################
+library("dplyr")
+Corr_Cerrado <- basal_Cerrado %>% dplyr::select(-c(meanndmi, sdndmi, minndmi, maxndmi, entropyndmi, meanmndwi, sdmndwi, minmndwi, maxmndwi, entropymndwi)) %>% dplyr::select(1:40)
+
+# correlation matrix
+## select variables corr > 0.75
+apply(ifelse(as.data.frame(cor(Corr_Cerrado) > 0.70) == FALSE, 0, 1),2, sum)
+# result: mintcb & minndwi not correlated
+
+# plot result
+jpeg("Corrmat_Cerrado.jpg", width = 3840, height = 2160)
+ggpairs(Corr_Cerrado)
+dev.off()
+
+
+####################
+# Cerrado Denso    #  
+####################
+
+Corr_Denso  <- basal_Denso %>% dplyr::select(-c(meanndmi, sdndmi, minndmi, maxndmi, entropyndmi, meanmndwi, sdmndwi, minmndwi, maxmndwi, entropymndwi)) %>% dplyr::select(1:40) 
+
+# correlation matrix
+# select variables corr > 0.75
+apply(ifelse(as.data.frame(cor(Corr_Denso) > 0.75) == FALSE, 0, 1),2, sum)
+# result: sdtcb & minndwi not correlated
+
+# plot result
+jpeg("Corrmat_Cerrado_Denso.jpg", width = 3840, height = 2160)
+ggpairs(Corr_Denso)
+dev.off()
+
+```
+
+
+# collinearity analysis for not correlated variables
+```{r, echo=FALSE}
+loadandinstall("ppcor")
+loadandinstall("mctest")
+
+####################
+# Cerrado          #  
+####################
+
+
+Coll_Cerrado <- basal_Cerrado %>% dplyr::select(c(sdndvi, entropyndvi, rao, meantcb, minndwi))
+
+imcdiag(Coll_Cerrado, basal_Cerrado$specrich, method = "VIF")
+imcdiag(Coll_Cerrado, basal_Cerrado$Shannon_hill_q1, method = "VIF")
+imcdiag(Coll_Cerrado, basal_Cerrado$Simpson_hill_q2, method = "VIF")
+imcdiag(Coll_Cerrado, basal_Cerrado$rarefaction, method = "VIF")
+
+
+####################
+# Cerrado Denso    #  
+####################   
+library("dplyr")
+Coll_Denso <- basal_Denso %>% dplyr::select(c(meanndvi, sdndvi, minndvi, maxndvi, entropyndvi, rao, sdtcb, minndwi))
+                        
+imcdiag(Coll_Denso, basal_Denso$specrich, method = "VIF")
+imcdiag(Coll_Denso, basal_Denso$Shannon_hill_q1, method = "VIF")
+imcdiag(Coll_Denso, basal_Denso$Simpson_hill_q2, method = "VIF")
+imcdiag(Coll_Denso, basal_Denso$rarefaction, method = "VIF")                        
+ 
+```
+
+
+```{r}
+# VSURF
+loadandinstall("VSURF")
+str(vegIndices)
+result <- VSURF(vegIndices, basal_Cerrado[,60], ntree = 100, parallel = F, clusterType = "FORK",  na.action = na.omit)
+
+str(basal_Cerrado[,24:25])
+result$call
+names(result)
+result$varselect.interp
+result$varselect.interp
+result$varselect.pred
+summary(result)
+plot(result)
+
+loadandinstall("dplyr")
+test <- select(basal_Cerrado, specrich, Shannon_hill_q1, Simpson_hill_q2, rarefaction, rao, shannon, entropyndvi, maxndvi, minndvi, meanndvi, sdndvi)
+str(test)
+str(basal_Cerrado)
+str(basal_Cerrado[,1:52])
+str(basal_Cerrado[,57:60])
+# BORUTA RANDOM FOREST
+loadandinstall("Boruta")
+# Decide if a variable is important or not using Boruta
+boruta_output <- Boruta(Coll_Cerrado, basal_Cerrado[,59], pValue = 0.05, doTrace=2, mcAdj = TRUE, maxRuns = 30)  # perform Boruta search
+# Confirmed 10 attributes: Humidity, Inversion_base_height, Inversion_temperature, Month, Pressure_gradient and 5 more.
+# Rejected 3 attributes: Day_of_month, Day_of_week, Wind_speed.
+boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
+print(boruta_signif)
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable importance
+
+
+
+
+
+
+
+
+
+
+
+# BORUTA RANDOM FOREST
+loadandinstall("Boruta")
+# Decide if a variable is important or not using Boruta
+boruta_output <- Boruta(test[,5:11], test[,3], pValue = 0.01, doTrace=2, mcAdj = TRUE, maxRuns = 15)  # perform Boruta search
+# Confirmed 10 attributes: Humidity, Inversion_base_height, Inversion_temperature, Month, Pressure_gradient and 5 more.
+# Rejected 3 attributes: Day_of_month, Day_of_week, Wind_speed.
+boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
+print(boruta_signif)
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable importance
+
+# MARS --> based on generalised cross validation (GCV)
+loadandinstall("earth")
+marsmodel <- earth(basal_Cerrado[,1:52], basal_Cerrado[,57])
+ev <- evimp(marsmodel)
+plot(ev)
+
+#random forest
+loadandinstall("party")
+cf1 <- cforest(rarefaction ~ ., data=test, controls = cforest_unbiased(mtry=2, ntree=50))
+varimp(cf1)
+varimp(cf1, conditional = TRUE)
+varimpAUC(cf1)
+
+names(basal_Cerrado[,5:34])
+
+#!!not work # calc.relimp --> relative importance
+loadandinstall("relaimpo")
+lmMod <- lm(Shannon_hill_q1 ~ ., test)
+relImportance <- calc.relimp(lmMod, type = "lmg", rela = TRUE)  # calculate relative importance scaled to 100
+sort(relImportance$lmg, decreasing=TRUE)  # relative importance
+```
+
+
+## Variable Selection (best model) Package (leaps) based on adjustedR?
+### Cerrado
+```{r}
+####################################
+#                                  #
+#             Cerrado              #
+#                                 #
+####################################
+
+
+# species richness
+
+#staring-model:
+model_SR <- lm(Simpson_hill_q2 ~   sdndvi * rao * entropyndvi + meantcb + minndwi , data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+#vif(model_SR)
+AIC(model_SR)
+anova(model_SR)
+(stat <- summary(model_SR))
+stat$coefficients[,2]
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+
+model.min <- lm(Simpson_hill_q2 ~ 1, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(Simpson_hill_q2 ~ sdndvi * rao * entropyndvi + meantcb + minndwi, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+(stat <- summary(model.SR.AIC))
+AIC(model.SR.AIC)
+model.SR.AIC
+stat$coefficients[,1]
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+###########################################################################
+# rarefaction
+
+#staring-model:
+model_SR <- lm(rarefaction ~ sdndvi*rao * entropyndvi + meantcb + minndwi, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(rarefaction ~ 1, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(rarefaction ~ meanndvi + sdndvi  + minndvi + entropyndvi + rao + meantcb + minndwi, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+############################################################################
+# shannon
+
+#staring-model:
+model_SR <- lm(Shannon_hill_q1 ~ meanndvi + sdndvi  + minndvi + entropyndvi + rao + meantcb + minndwi, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Shannon_hill_q1 ~ 1, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(Shannon_hill_q1 ~ meanndvi + sdndvi  + minndvi + entropyndvi + rao + meantcb + minndwi, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+
+############################################################################
+# simpson
+
+#staring-model:
+model_SR <- lm(Simpson_hill_q2 ~ meanndvi + sdndvi  + minndvi + entropyndvi + rao + meantcb + minndwi, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Simpson_hill_q2 ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(Simpson_hill_q2 ~ meanndvi + sdndvi  + minndvi + entropyndvi + rao + meantcb + minndwi, data = basal_nomixel[basal_nomixel$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+```
+
+### Cerrado denos
+```{r}
+####################################
+#                                  #
+#             Cerrado denso        #
+#                                 #
+####################################
+
+# species richness
+
+#staring-model:
+model_SR <- lm(specrich ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(specrich ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(specrich ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+###########################################################################
+# rarefaction
+
+#staring-model:
+model_SR <- lm(rarefaction ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(rarefaction ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(rarefaction ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+############################################################################
+# shannon
+
+#staring-model:
+model_SR <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Shannon_hill_q1 ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+
+############################################################################
+# simpson
+
+#staring-model:
+model_SR <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Simpson_hill_q2 ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+```
+
+
+
+# all plots (including mixel)
+## plotting
+```{r}
+cor.mat <- cor(basal[,1:34])
+corrplot(cor.mat)
+describe(BR_data$Biome)
+par(mfrow=c(1,2))
+hist(BR_data$DBH1.3m..cm.[BR_data$Biome=="Cerrado"], breaks = seq(0, 60, 10), main="Cerrado")
+hist(BR_data$DBH1.3m..cm.[BR_data$Biome=="Denso"], breaks = seq(0, 60, 10), main="Cerrado denso")
+basal$Biome=="Cerrado"
+
+
+par(mfrow=c(2,4))
+# species richness
+specR_C <- lm(basal$specrich[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+specR_D <- lm(basal$specrich[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$specrich, xlab ="edge distance [m]", ylab = "species richness", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(specR_C)
+abline(specR_D, lty = 3, col = "red")
+shapiro.test((specR_C$residuals))
+shapiro.test((specR_D$residuals))
+
+# rarefaction
+rare_C <- lm(basal$rarefaction[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+rare_D <- lm(basal$rarefaction[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$rarefaction, xlab ="edge distance [m]", ylab = "rarefaction", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(rare_C)
+abline(rare_D, lty = 3, col = "red")
+shapiro.test((rare_C$residuals))
+shapiro.test((rare_D$residuals))
+
+# shannon
+shannon_C <- lm(basal$Shannon_hill_q1[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+shannon_D <- lm(basal$Shannon_hill_q1[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$Shannon_hill_q1, xlab ="edge distance [m]", ylab = "shannon", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(shannon_C)
+abline(shannon_D, lty = 3, col = "red")
+shapiro.test((shannon_C$residuals))
+shapiro.test((shannon_D$residuals))
+
+# simpson
+simo_C <- lm(basal$Simpson_hill_q2[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+simo_D <- lm(basal$Simpson_hill_q2[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$Simpson_hill_q2, xlab ="edge distance [m]", ylab = "simpson", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(simo_C)
+abline(simo_D, lty = 3, col = "red")
+shapiro.test((simo_C$residuals))
+shapiro.test((simo_D$residuals))
+
+# BMASS
+BMASS_C <- lm(basal$AGBplot[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+BMASS_D <- lm(basal$AGBplot[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$AGBplot, xlab ="edge distance [m]", ylab = "BMASS", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(BMASS_C)
+abline(BMASS_D, lty = 3, col = "red")
+shapiro.test((BMASS_C$residuals))
+shapiro.test((BMASS_D$residuals))
+
+# WD
+WD_C <- lm(basal$WD[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+WD_D <- lm(basal$WD[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$WD, xlab ="edge distance [m]", ylab = "WD", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(WD_C)
+abline(WD_D, lty = 3, col = "red")
+shapiro.test((WD_C$residuals))
+shapiro.test((WD_D$residuals))
+
+# sdNDVI
+sNDVI_C <- lm(basal$sdNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sNDVI_D <- lm(basal$sdNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdNDVI, xlab ="edge distance [m]", ylab = "sd NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sNDVI_C)
+abline(sNDVI_D, lty = 3, col = "red")
+shapiro.test((sNDVI_C$residuals))
+shapiro.test((sNDVI_D$residuals))
+
+# mNDVI
+mNDVI_C <- lm(basal$meanNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mNDVI_D <- lm(basal$meanNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanNDVI, xlab ="edge distance [m]", ylab = "mean NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mNDVI_C)
+abline(mNDVI_D, lty = 3, col = "red")
+shapiro.test((mNDVI_C$residuals))
+shapiro.test((mNDVI_D$residuals))
+
+# maxNDVI
+maxNDVI_C <- lm(basal$maxNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+maxNDVI_D <- lm(basal$maxNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$maxNDVI, xlab ="edge distance [m]", ylab = "max NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(maxNDVI_C)
+abline(maxNDVI_D, lty = 3, col = "red")
+shapiro.test((mNDVI_C$residuals))
+shapiro.test((mNDVI_D$residuals))
+
+# minNDVI
+minNDVI_C <- lm(basal$minNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+minNDVI_D <- lm(basal$minNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$minNDVI, xlab ="edge distance [m]", ylab = "max NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(minNDVI_C)
+abline(minNDVI_D, lty = 3, col = "red")
+shapiro.test((minNDVI_C$residuals))
+shapiro.test((minNDVI_D$residuals))
+
+# sdevi
+sevi_C <- lm(basal$sdevi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sevi_D <- lm(basal$sdevi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdevi, xlab ="edge distance [m]", ylab = "sd evi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sevi_C)
+abline(sevi_D, lty = 3, col = "red")
+shapiro.test((sevi_C$residuals))
+shapiro.test((sevi_D$residuals))
+
+# mevi
+mevi_C <- lm(basal$meanevi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mevi_D <- lm(basal$meanevi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanevi, xlab ="edge distance [m]", ylab = "mean evi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mevi_C)
+abline(mevi_D, lty = 3, col = "red")
+shapiro.test((mevi_C$residuals))
+shapiro.test((mevi_D$residuals))
+
+# sdsavi
+ssavi_C <- lm(basal$sdsavi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+ssavi_D <- lm(basal$sdsavi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdsavi, xlab ="edge distance [m]", ylab = "sd savi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(ssavi_C)
+abline(ssavi_D, lty = 3, col = "red")
+shapiro.test((ssavi_C$residuals))
+shapiro.test((ssavi_D$residuals))
+
+# msavi
+msavi_C <- lm(basal$meansavi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+msavi_D <- lm(basal$meansavi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meansavi, xlab ="edge distance [m]", ylab = "mean savi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(msavi_C)
+abline(msavi_D, lty = 3, col = "red")
+shapiro.test((msavi_C$residuals))
+shapiro.test((msavi_D$residuals))
+
+# sdndmi
+sndmi_C <- lm(basal$sdndmi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sndmi_D <- lm(basal$sdndmi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdndmi, xlab ="edge distance [m]", ylab = "sd ndmi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sndmi_C)
+abline(sndmi_D, lty = 3, col = "red")
+shapiro.test((sndmi_C$residuals))
+shapiro.test((sndmi_D$residuals))
+
+# mndmi
+mndmi_C <- lm(basal$meanndmi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mndmi_D <- lm(basal$meanndmi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanndmi, xlab ="edge distance [m]", ylab = "mean ndmi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mndmi_C)
+abline(mndmi_D, lty = 3, col = "red")
+shapiro.test((mndmi_C$residuals))
+shapiro.test((mndmi_D$residuals))
+
+# sdndwi
+sndwi_C <- lm(basal$sdndwi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sndwi_D <- lm(basal$sdndwi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdndwi, xlab ="edge distance [m]", ylab = "sd ndwi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sndwi_C)
+abline(sndwi_D, lty = 3, col = "red")
+shapiro.test((sndwi_C$residuals))
+shapiro.test((sndwi_D$residuals))
+
+# mndwi
+mndwi_C <- lm(basal$meanndwi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mndwi_D <- lm(basal$meanndwi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanndwi, xlab ="edge distance [m]", ylab = "mean ndwi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mndwi_C)
+abline(mndwi_D, lty = 3, col = "red")
+shapiro.test((mndwi_C$residuals))
+shapiro.test((mndwi_D$residuals))
+
+# sdtcb
+stcb_C <- lm(basal$sdtcb[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+stcb_D <- lm(basal$sdtcb[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdtcb, xlab ="edge distance [m]", ylab = "sd tcb", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(stcb_C)
+abline(stcb_D, lty = 3, col = "red")
+shapiro.test((stcb_C$residuals))
+shapiro.test((stcb_D$residuals))
+
+# mtcb
+mtcb_C <- lm(basal$meantcb[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mtcb_D <- lm(basal$meantcb[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meantcb, xlab ="edge distance [m]", ylab = "mean tcb", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mtcb_C)
+abline(mtcb_D, lty = 3, col = "red")
+shapiro.test((mtcb_C$residuals))
+shapiro.test((mtcb_D$residuals))
+
+# sdtcg
+stcg_C <- lm(basal$sdtcg[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+stcg_D <- lm(basal$sdtcg[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdtcg, xlab ="edge distance [m]", ylab = "sd tcg", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(stcg_C)
+abline(stcg_D, lty = 3, col = "red")
+shapiro.test((stcg_C$residuals))
+shapiro.test((stcg_D$residuals))
+
+# mtcg
+mtcg_C <- lm(basal$meantcg[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mtcg_D <- lm(basal$meantcg[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meantcg, xlab ="edge distance [m]", ylab = "mean tcg", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mtcg_C)
+abline(mtcg_D, lty = 3, col = "red")
+shapiro.test((mtcg_C$residuals))
+shapiro.test((mtcg_D$residuals))
+
+# sdtcw
+stcw_C <- lm(basal$sdtcw[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+stcw_D <- lm(basal$sdtcw[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdtcw, xlab ="edge distance [m]", ylab = "sd tcw", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(stcw_C)
+abline(stcw_D, lty = 3, col = "red")
+shapiro.test((stcw_C$residuals))
+shapiro.test((stcw_D$residuals))
+
+# mtcw
+mtcw_C <- lm(basal$meantcw[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mtcw_D <- lm(basal$meantcw[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meantcw, xlab ="edge distance [m]", ylab = "mean tcw", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mtcw_C)
+abline(mtcw_D, lty = 3, col = "red")
+shapiro.test((mtcw_C$residuals))
+shapiro.test((mtcw_D$residuals))
+
+# sdnbr
+snbr_C <- lm(basal$sdnbr[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+snbr_D <- lm(basal$sdnbr[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdnbr, xlab ="edge distance [m]", ylab = "sd nbr", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(snbr_C)
+abline(snbr_D, lty = 3, col = "red")
+shapiro.test((snbr_C$residuals))
+shapiro.test((snbr_D$residuals))
+
+# mnbr
+mnbr_C <- lm(basal$meannbr[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mnbr_D <- lm(basal$meannbr[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meannbr, xlab ="edge distance [m]", ylab = "mean nbr", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mnbr_C)
+abline(mnbr_D, lty = 3, col = "red")
+shapiro.test((mnbr_C$residuals))
+shapiro.test((mnbr_D$residuals))
+
+
+
+
+```
+
+
+
+
+
+## plotting
+```{r}
+cor.mat <- cor(basal[,1:34])
+corrplot(cor.mat)
+describe(BR_data$Biome)
+par(mfrow=c(1,2))
+hist(BR_data$DBH1.3m..cm.[BR_data$Biome=="Cerrado"], breaks = seq(0, 60, 10), main="Cerrado")
+hist(BR_data$DBH1.3m..cm.[BR_data$Biome=="Denso"], breaks = seq(0, 60, 10), main="Cerrado denso")
+basal$Biome=="Cerrado"
+
+
+par(mfrow=c(2,4))
+# species richness
+specR_C <- lm(basal$specrich[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+specR_D <- lm(basal$specrich[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$specrich, xlab ="edge distance [m]", ylab = "species richness", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(specR_C)
+abline(specR_D, lty = 3, col = "red")
+shapiro.test((specR_C$residuals))
+shapiro.test((specR_D$residuals))
+
+# rarefaction
+rare_C <- lm(basal$rarefaction[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+rare_D <- lm(basal$rarefaction[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$rarefaction, xlab ="edge distance [m]", ylab = "rarefaction", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(rare_C)
+abline(rare_D, lty = 3, col = "red")
+shapiro.test((rare_C$residuals))
+shapiro.test((rare_D$residuals))
+
+# shannon
+shannon_C <- lm(basal$Shannon_hill_q1[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+shannon_D <- lm(basal$Shannon_hill_q1[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$Shannon_hill_q1, xlab ="edge distance [m]", ylab = "shannon", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(shannon_C)
+abline(shannon_D, lty = 3, col = "red")
+shapiro.test((shannon_C$residuals))
+shapiro.test((shannon_D$residuals))
+
+# simpson
+simo_C <- lm(basal$Simpson_hill_q2[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+simo_D <- lm(basal$Simpson_hill_q2[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$Simpson_hill_q2, xlab ="edge distance [m]", ylab = "simpson", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(simo_C)
+abline(simo_D, lty = 3, col = "red")
+shapiro.test((simo_C$residuals))
+shapiro.test((simo_D$residuals))
+
+# BMASS
+BMASS_C <- lm(basal$AGBplot[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+BMASS_D <- lm(basal$AGBplot[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$AGBplot, xlab ="edge distance [m]", ylab = "BMASS", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(BMASS_C)
+abline(BMASS_D, lty = 3, col = "red")
+shapiro.test((BMASS_C$residuals))
+shapiro.test((BMASS_D$residuals))
+
+# WD
+WD_C <- lm(basal$WD[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+WD_D <- lm(basal$WD[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$WD, xlab ="edge distance [m]", ylab = "WD", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(WD_C)
+abline(WD_D, lty = 3, col = "red")
+shapiro.test((WD_C$residuals))
+shapiro.test((WD_D$residuals))
+
+# sdNDVI
+sNDVI_C <- lm(basal$sdNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sNDVI_D <- lm(basal$sdNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdNDVI, xlab ="edge distance [m]", ylab = "sd NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sNDVI_C)
+abline(sNDVI_D, lty = 3, col = "red")
+shapiro.test((sNDVI_C$residuals))
+shapiro.test((sNDVI_D$residuals))
+
+# mNDVI
+mNDVI_C <- lm(basal$meanNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mNDVI_D <- lm(basal$meanNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanNDVI, xlab ="edge distance [m]", ylab = "mean NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mNDVI_C)
+abline(mNDVI_D, lty = 3, col = "red")
+shapiro.test((mNDVI_C$residuals))
+shapiro.test((mNDVI_D$residuals))
+
+# maxNDVI
+maxNDVI_C <- lm(basal$maxNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+maxNDVI_D <- lm(basal$maxNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$maxNDVI, xlab ="edge distance [m]", ylab = "max NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(maxNDVI_C)
+abline(maxNDVI_D, lty = 3, col = "red")
+shapiro.test((mNDVI_C$residuals))
+shapiro.test((mNDVI_D$residuals))
+
+# minNDVI
+minNDVI_C <- lm(basal$minNDVI[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+minNDVI_D <- lm(basal$minNDVI[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$minNDVI, xlab ="edge distance [m]", ylab = "max NDVI", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(minNDVI_C)
+abline(minNDVI_D, lty = 3, col = "red")
+shapiro.test((minNDVI_C$residuals))
+shapiro.test((minNDVI_D$residuals))
+
+# sdevi
+sevi_C <- lm(basal$sdevi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sevi_D <- lm(basal$sdevi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdevi, xlab ="edge distance [m]", ylab = "sd evi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sevi_C)
+abline(sevi_D, lty = 3, col = "red")
+shapiro.test((sevi_C$residuals))
+shapiro.test((sevi_D$residuals))
+
+# mevi
+mevi_C <- lm(basal$meanevi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mevi_D <- lm(basal$meanevi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanevi, xlab ="edge distance [m]", ylab = "mean evi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mevi_C)
+abline(mevi_D, lty = 3, col = "red")
+shapiro.test((mevi_C$residuals))
+shapiro.test((mevi_D$residuals))
+
+# sdsavi
+ssavi_C <- lm(basal$sdsavi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+ssavi_D <- lm(basal$sdsavi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdsavi, xlab ="edge distance [m]", ylab = "sd savi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(ssavi_C)
+abline(ssavi_D, lty = 3, col = "red")
+shapiro.test((ssavi_C$residuals))
+shapiro.test((ssavi_D$residuals))
+
+# msavi
+msavi_C <- lm(basal$meansavi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+msavi_D <- lm(basal$meansavi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meansavi, xlab ="edge distance [m]", ylab = "mean savi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(msavi_C)
+abline(msavi_D, lty = 3, col = "red")
+shapiro.test((msavi_C$residuals))
+shapiro.test((msavi_D$residuals))
+
+# sdndmi
+sndmi_C <- lm(basal$sdndmi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sndmi_D <- lm(basal$sdndmi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdndmi, xlab ="edge distance [m]", ylab = "sd ndmi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sndmi_C)
+abline(sndmi_D, lty = 3, col = "red")
+shapiro.test((sndmi_C$residuals))
+shapiro.test((sndmi_D$residuals))
+
+# mndmi
+mndmi_C <- lm(basal$meanndmi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mndmi_D <- lm(basal$meanndmi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanndmi, xlab ="edge distance [m]", ylab = "mean ndmi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mndmi_C)
+abline(mndmi_D, lty = 3, col = "red")
+shapiro.test((mndmi_C$residuals))
+shapiro.test((mndmi_D$residuals))
+
+# sdndwi
+sndwi_C <- lm(basal$sdndwi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+sndwi_D <- lm(basal$sdndwi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdndwi, xlab ="edge distance [m]", ylab = "sd ndwi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(sndwi_C)
+abline(sndwi_D, lty = 3, col = "red")
+shapiro.test((sndwi_C$residuals))
+shapiro.test((sndwi_D$residuals))
+
+# mndwi
+mndwi_C <- lm(basal$meanndwi[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mndwi_D <- lm(basal$meanndwi[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meanndwi, xlab ="edge distance [m]", ylab = "mean ndwi", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mndwi_C)
+abline(mndwi_D, lty = 3, col = "red")
+shapiro.test((mndwi_C$residuals))
+shapiro.test((mndwi_D$residuals))
+
+# sdtcb
+stcb_C <- lm(basal$sdtcb[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+stcb_D <- lm(basal$sdtcb[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdtcb, xlab ="edge distance [m]", ylab = "sd tcb", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(stcb_C)
+abline(stcb_D, lty = 3, col = "red")
+shapiro.test((stcb_C$residuals))
+shapiro.test((stcb_D$residuals))
+
+# mtcb
+mtcb_C <- lm(basal$meantcb[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mtcb_D <- lm(basal$meantcb[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meantcb, xlab ="edge distance [m]", ylab = "mean tcb", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mtcb_C)
+abline(mtcb_D, lty = 3, col = "red")
+shapiro.test((mtcb_C$residuals))
+shapiro.test((mtcb_D$residuals))
+
+# sdtcg
+stcg_C <- lm(basal$sdtcg[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+stcg_D <- lm(basal$sdtcg[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdtcg, xlab ="edge distance [m]", ylab = "sd tcg", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(stcg_C)
+abline(stcg_D, lty = 3, col = "red")
+shapiro.test((stcg_C$residuals))
+shapiro.test((stcg_D$residuals))
+
+# mtcg
+mtcg_C <- lm(basal$meantcg[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mtcg_D <- lm(basal$meantcg[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meantcg, xlab ="edge distance [m]", ylab = "mean tcg", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mtcg_C)
+abline(mtcg_D, lty = 3, col = "red")
+shapiro.test((mtcg_C$residuals))
+shapiro.test((mtcg_D$residuals))
+
+# sdtcw
+stcw_C <- lm(basal$sdtcw[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+stcw_D <- lm(basal$sdtcw[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdtcw, xlab ="edge distance [m]", ylab = "sd tcw", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(stcw_C)
+abline(stcw_D, lty = 3, col = "red")
+shapiro.test((stcw_C$residuals))
+shapiro.test((stcw_D$residuals))
+
+# mtcw
+mtcw_C <- lm(basal$meantcw[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mtcw_D <- lm(basal$meantcw[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meantcw, xlab ="edge distance [m]", ylab = "mean tcw", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mtcw_C)
+abline(mtcw_D, lty = 3, col = "red")
+shapiro.test((mtcw_C$residuals))
+shapiro.test((mtcw_D$residuals))
+
+# sdnbr
+snbr_C <- lm(basal$sdnbr[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+snbr_D <- lm(basal$sdnbr[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$sdnbr, xlab ="edge distance [m]", ylab = "sd nbr", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(snbr_C)
+abline(snbr_D, lty = 3, col = "red")
+shapiro.test((snbr_C$residuals))
+shapiro.test((snbr_D$residuals))
+
+# mnbr
+mnbr_C <- lm(basal$meannbr[basal$Biome=="Cerrado"] ~ basal$dist[basal$Biome=="Cerrado"])
+mnbr_D <- lm(basal$meannbr[basal$Biome=="Denso"] ~ basal$dist[basal$Biome=="Denso"])
+plot(basal$dist, basal$meannbr, xlab ="edge distance [m]", ylab = "mean nbr", col = ifelse(basal[,"Biome"] == "Cerrado", "black", "red"))
+legend("bottomright", inset=0.001, legend=c("Cerrado", "Cerrado Denso"), lty=c(1,3), col = c("black", "red"), cex = 0.5)
+abline(mnbr_C)
+abline(mnbr_D, lty = 3, col = "red")
+shapiro.test((mnbr_C$residuals))
+shapiro.test((mnbr_D$residuals))
+
+
+
+
+```
+
+
+
+
+## Variable Selection (best model) Package (leaps) based on adjustedR?
+### Cerrado
+```{r}
+####################################
+#                                  #
+#             Cerrado              #
+#                                 #
+####################################
+
+# species richness
+
+#staring-model:
+model_SR <- lm(specrich ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(specrich ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(specrich ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+###########################################################################
+# rarefaction
+
+#staring-model:
+model_SR <- lm(rarefaction ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(rarefaction ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(rarefaction ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+############################################################################
+# shannon
+
+#staring-model:
+model_SR <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Shannon_hill_q1 ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+
+############################################################################
+# simpson
+
+#staring-model:
+model_SR <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Simpson_hill_q2 ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+############################################################################
+# Biomass
+
+#staring-model:
+model_SR <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(AGBplot ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+```
+
+### Cerrado denos
+```{r}
+####################################
+#                                  #
+#             Cerrado denso        #
+#                                 #
+####################################
+
+# species richness
+
+#staring-model:
+model_SR <- lm(specrich ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(specrich ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(specrich ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+###########################################################################
+# rarefaction
+
+#staring-model:
+model_SR <- lm(rarefaction ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(rarefaction ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(rarefaction ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+############################################################################
+# shannon
+
+#staring-model:
+model_SR <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Shannon_hill_q1 ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+
+############################################################################
+# simpson
+
+#staring-model:
+model_SR <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Simpson_hill_q2 ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+############################################################################
+# AGBplot (Biomass)
+
+#staring-model:
+model_SR <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(AGBplot ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+############################################################################
+# WD 
+
+#staring-model:
+model_SR <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(WD ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(WD ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Test
+## Variable Selection (best model) Package (leaps) based on adjustedR?
+### Cerrado
+```{r}
+####################################
+#                                  #
+#             Cerrado              #
+#                                 #
+####################################
+
+# species richness
+
+#staring-model:
+model_SR <- lm(specrich ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(specrich ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(specrich ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+###########################################################################
+# rarefaction
+
+#staring-model:
+model_SR <- lm(rarefaction ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(rarefaction ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(rarefaction ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+############################################################################
+# shannon
+
+#staring-model:
+model_SR <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Shannon_hill_q1 ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+
+############################################################################
+# simpson
+
+#staring-model:
+model_SR <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Simpson_hill_q2 ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+############################################################################
+# Biomass
+
+#staring-model:
+model_SR <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(AGBplot ~ 1, data = basal[basal$Biome == "Cerrado",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Cerrado",])
+model.max <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Cerrado",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+```
+
+### Cerrado denos
+```{r}
+####################################
+#                                  #
+#             Cerrado denso        #
+#                                 #
+####################################
+
+# species richness
+
+#staring-model:
+model_SR <- lm(specrich ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(specrich ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(specrich ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+###########################################################################
+# rarefaction
+
+#staring-model:
+model_SR <- lm(rarefaction ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(rarefaction ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(rarefaction ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+############################################################################
+# shannon
+
+#staring-model:
+model_SR <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Shannon_hill_q1 ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(Shannon_hill_q1 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+
+############################################################################
+# simpson
+
+#staring-model:
+model_SR <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(Simpson_hill_q2 ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(Simpson_hill_q2 ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+############################################################################
+# AGBplot (Biomass)
+
+#staring-model:
+model_SR <- lm(AGBplot ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(AGBplot ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(AGBplot ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+############################################################################
+# WD 
+
+#staring-model:
+model_SR <- lm(AGBplot ~ meanNDVI + sdNDVI +  meanevi + sdevi, data = basal[basal$Biome == "Denso",])
+#vif(model_SR)
+anova(model_SR)
+summary(model_SR)
+
+#############################
+#     Variable Selection    #
+#############################
+#------------variable-selection-based-StepAIC----
+# all variables with collinearity (Vif >= 4 have been removed)
+# minimal model
+model.min <- lm(WD ~ 1, data = basal[basal$Biome == "Denso",])
+# maximal model (mit allen erkl?renden Variablen)
+#model.max <- lm(sdNDVI ~ specrich + rarefaction +  Shannon_hill_q1 + Simpson_hill_q2 + basalarea + StemDensity + dbh + height + AGBplot + WD + dist, data = basal[basal$Biome == "Denso",])
+model.max <- lm(WD ~ meanNDVI + sdNDVI + maxNDVI + minNDVI + meansavi +sdsavi + meanevi + sdevi + meanndmi + sdndmi + meanndwi + sdndwi + meanmndwi + sdmndwi  + sdtcg + meantcg + sdtcb + meantcb + sdtcw + meantcw + meannbr + sdnbr, data = basal[basal$Biome == "Denso",])
+# load package
+library(MASS)
+# slect model with stewpise regression "both" (== forward & backward selection)
+model.SR.AIC <- stepAIC(model.min, direction="both",
+                     scope=list(upper=model.max, lower=model.min))
+# stepAIC possible directions = "both" "forward" "backward"
+
+# model description
+summary(model.SR.AIC)
+AIC(model.SR.AIC)
+model.SR.AIC
+# best models retains intercept, other variables are below 5%-level and not significant
+
+#------------Residual-Analysis---------
+# plotting residual vs fitted model
+plot(fitted(model.SR.AIC), residuals(model.SR.AIC),
+     xlab="predicted value", ylab="residuals", pch=16)
+abline(h=0, col="darkgray", lty="dashed")
+
+# noramlity?
+shapiro.test(model.SR.AIC$res)
+# H0 (normal distribution) The assumption can not be rejected! p > aplha 
+
+#------------plotting-model------------
+
+#plot(model.SR.AIC)
+
+##
+#result
+#potential explantaory variables are specrich/rarefactio ~ maxNDVI
+
+
+```
